@@ -1,0 +1,13 @@
+/*
+ * Copyright (C) 2015 Access-IS
+ * Based on work by Solid Run & Russell King
+ */
+/dts-v1/;
+
+#include "imx6dl.dtsi"
+#include "imx6qdl-bgr750.dtsi"
+
+/ {
+	model = "Access-IS BGR750";
+	compatible = "Access-IS,bgr750/dl", "fsl,imx6dl";
+};

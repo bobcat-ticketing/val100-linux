@@ -30,6 +30,7 @@ obj-$(CONFIG_MXC_DEBUG_BOARD) += 3ds_debugboard.o
 ifeq ($(CONFIG_CPU_IDLE),y)
 obj-$(CONFIG_SOC_IMX5) += cpuidle-imx5.o
 obj-$(CONFIG_SOC_IMX6Q) += cpuidle-imx6q.o
+obj-$(CONFIG_SOC_IMX6SL) += cpuidle-imx6sl.o
 endif
 
 ifdef CONFIG_SND_IMX_SOC
@@ -101,9 +102,18 @@ obj-$(CONFIG_HOTPLUG_CPU) += hotplug.o
 obj-$(CONFIG_SOC_IMX6Q) += clk-imx6q.o mach-imx6q.o
 obj-$(CONFIG_SOC_IMX6SL) += clk-imx6sl.o mach-imx6sl.o
 
-obj-$(CONFIG_SOC_IMX6Q) += pm-imx6q.o headsmp.o
-# i.MX6SL reuses i.MX6Q code
-obj-$(CONFIG_SOC_IMX6SL) += pm-imx6q.o headsmp.o
+AFLAGS_suspend-imx6.o :=-Wa,-march=armv7-a
+obj-$(CONFIG_PM) += suspend-imx6.o pm-imx6.o headsmp.o
+
+obj-y += busfreq-imx6.o
+ifeq ($(CONFIG_ARM_IMX6_CPUFREQ),y)
+obj-$(CONFIG_SOC_IMX6Q) += ddr3_freq_imx6.o busfreq_ddr3.o
+obj-$(CONFIG_SOC_IMX6SL) += lpddr2_freq_imx6.o busfreq_lpddr2.o
+endif
+ifeq ($(CONFIG_CPU_IDLE), y)
+obj-$(CONFIG_SOC_IMX6SL) += imx6sl_wfi.o
+endif
+
 
 # i.MX5 based machines
 obj-$(CONFIG_MACH_MX51_BABBAGE) += mach-mx51_babbage.o

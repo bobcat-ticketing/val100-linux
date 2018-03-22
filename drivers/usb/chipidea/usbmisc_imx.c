@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 Freescale Semiconductor, Inc.
+ * Copyright 2012-2013 Freescale Semiconductor, Inc.
  *
  * The code contained herein is licensed under the GNU General Public
  * License. You may obtain a copy of the GNU General Public License
@@ -11,10 +11,10 @@
 
 #include <linux/module.h>
 #include <linux/of_platform.h>
-#include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/delay.h>
+#include <linux/regulator/consumer.h>
 
 #include "ci_hdrc_imx.h"
 
@@ -33,22 +33,28 @@
 #define MX53_BM_OVER_CUR_DIS_UHx	BIT(30)
 
 #define MX6_BM_OVER_CUR_DIS		BIT(7)
+#define MX6_BM_WAKEUP_ENABLE		BIT(10)
+#define MX6_BM_ID_WAKEUP		BIT(16)
+#define MX6_BM_VBUS_WAKEUP		BIT(17)
+#define MX6_BM_WAKEUP_INTR		BIT(31)
 
 struct usbmisc_ops {
 	/* It's called once when probe a usb device */
 	int (*init)(struct imx_usbmisc_data *data);
 	/* It's called once after adding a usb device */
 	int (*post)(struct imx_usbmisc_data *data);
+	/* It's called when we need to enable usb wakeup */
+	int (*set_wakeup)(struct imx_usbmisc_data *data, bool enabled);
 };
 
 struct imx_usbmisc {
 	void __iomem *base;
 	spinlock_t lock;
-	struct clk *clk;
 	const struct usbmisc_ops *ops;
 };
 
 static struct imx_usbmisc *usbmisc;
+static struct regulator *vbus_wakeup_reg;
 
 static int usbmisc_imx25_post(struct imx_usbmisc_data *data)
 {
@@ -158,6 +164,47 @@ static int usbmisc_imx6q_init(struct imx_usbmisc_data *data)
 	return 0;
 }
 
+static u32 imx6q_finalize_wakeup_setting(struct imx_usbmisc_data *data)
+{
+	if (data->available_role == USB_DR_MODE_PERIPHERAL)
+		return MX6_BM_VBUS_WAKEUP;
+	else if (data->available_role == USB_DR_MODE_OTG)
+		return MX6_BM_VBUS_WAKEUP | MX6_BM_ID_WAKEUP;
+
+	return 0;
+}
+
+static int usbmisc_imx6q_set_wakeup
+	(struct imx_usbmisc_data *data, bool enabled)
+{
+	unsigned long flags;
+	u32 reg, val = MX6_BM_WAKEUP_ENABLE;
+	int ret = 0;
+
+	if (data->index > 3)
+		return -EINVAL;
+
+	spin_lock_irqsave(&usbmisc->lock, flags);
+	reg = readl(usbmisc->base + data->index * 4);
+	if (enabled) {
+		val |= imx6q_finalize_wakeup_setting(data);
+		writel(reg | val, usbmisc->base + data->index * 4);
+		if (vbus_wakeup_reg)
+			ret = regulator_enable(vbus_wakeup_reg);
+	} else {
+		if (reg & MX6_BM_WAKEUP_INTR)
+			pr_debug("wakeup int at ci_hdrc.%d\n", data->index);
+		val = MX6_BM_WAKEUP_ENABLE | MX6_BM_VBUS_WAKEUP
+			| MX6_BM_ID_WAKEUP;
+		writel(reg & ~val, usbmisc->base + data->index * 4);
+		if (vbus_wakeup_reg && regulator_is_enabled(vbus_wakeup_reg))
+			regulator_disable(vbus_wakeup_reg);
+	}
+	spin_unlock_irqrestore(&usbmisc->lock, flags);
+
+	return ret;
+}
+
 static const struct usbmisc_ops imx25_usbmisc_ops = {
 	.post = usbmisc_imx25_post,
 };
@@ -172,6 +219,7 @@ static const struct usbmisc_ops imx53_usbmisc_ops = {
 
 static const struct usbmisc_ops imx6q_usbmisc_ops = {
 	.init = usbmisc_imx6q_init,
+	.set_wakeup = usbmisc_imx6q_set_wakeup,
 };
 
 int imx_usbmisc_init(struct imx_usbmisc_data *data)
@@ -193,6 +241,16 @@ int imx_usbmisc_init_post(struct imx_usbmisc_data *data)
 	return usbmisc->ops->post(data);
 }
 EXPORT_SYMBOL_GPL(imx_usbmisc_init_post);
+
+int imx_usbmisc_set_wakeup(struct imx_usbmisc_data *data, bool enabled)
+{
+	if (!usbmisc)
+		return -ENODEV;
+	if (!usbmisc->ops->set_wakeup)
+		return 0;
+	return usbmisc->ops->set_wakeup(data, enabled);
+}
+EXPORT_SYMBOL_GPL(imx_usbmisc_set_wakeup);
 
 static const struct of_device_id usbmisc_imx_dt_ids[] = {
 	{
@@ -223,7 +281,6 @@ static int usbmisc_imx_probe(struct platform_device *pdev)
 {
 	struct resource	*res;
 	struct imx_usbmisc *data;
-	int ret;
 	struct of_device_id *tmp_dev;
 
 	if (usbmisc)
@@ -240,31 +297,28 @@ static int usbmisc_imx_probe(struct platform_device *pdev)
 	if (IS_ERR(data->base))
 		return PTR_ERR(data->base);
 
-	data->clk = devm_clk_get(&pdev->dev, NULL);
-	if (IS_ERR(data->clk)) {
-		dev_err(&pdev->dev,
-			"failed to get clock, err=%ld\n", PTR_ERR(data->clk));
-		return PTR_ERR(data->clk);
-	}
-
-	ret = clk_prepare_enable(data->clk);
-	if (ret) {
-		dev_err(&pdev->dev,
-			"clk_prepare_enable failed, err=%d\n", ret);
-		return ret;
-	}
-
 	tmp_dev = (struct of_device_id *)
 		of_match_device(usbmisc_imx_dt_ids, &pdev->dev);
 	data->ops = (const struct usbmisc_ops *)tmp_dev->data;
 	usbmisc = data;
+
+	vbus_wakeup_reg = devm_regulator_get(&pdev->dev, "vbus-wakeup");
+	if (PTR_ERR(vbus_wakeup_reg) == -EPROBE_DEFER)
+		return -EPROBE_DEFER;
+	else if (PTR_ERR(vbus_wakeup_reg) == -ENODEV)
+		/* no vbus regualator is needed */
+		vbus_wakeup_reg = NULL;
+	else if (IS_ERR(vbus_wakeup_reg)) {
+		dev_err(&pdev->dev, "Getting regulator error: %ld\n",
+			PTR_ERR(vbus_wakeup_reg));
+		return PTR_ERR(vbus_wakeup_reg);
+	}
 
 	return 0;
 }
 
 static int usbmisc_imx_remove(struct platform_device *pdev)
 {
-	clk_disable_unprepare(usbmisc->clk);
 	usbmisc = NULL;
 	return 0;
 }

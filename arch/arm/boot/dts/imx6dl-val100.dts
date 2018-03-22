@@ -1,0 +1,13 @@
+/*
+ * Copyright (C) 2015 Access-IS
+ * Based on work by Solid Run & Russell King
+ */
+/dts-v1/;
+
+#include "imx6dl.dtsi"
+#include "imx6qdl-val100.dtsi"
+
+/ {
+	model = "Access-IS VAL100 Solo/DualLite";
+	compatible = "Access-IS,val100/dl", "fsl,imx6dl";
+};

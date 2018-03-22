@@ -1,5 +1,5 @@
 /*
- * Copyright 2013 Freescale Semiconductor, Inc.
+ * Copyright (C) 2013 Freescale Semiconductor, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -71,8 +71,8 @@
 #define IMX6SL_CLK_PERIPH		58
 #define IMX6SL_CLK_PERIPH2		59
 #define IMX6SL_CLK_OCRAM_PODF		60
-#define IMX6SL_CLK_PERIPH_CLK2_PODF	61
-#define IMX6SL_CLK_PERIPH2_CLK2_PODF	62
+#define IMX6SL_CLK_PERIPH_CLK2		61
+#define IMX6SL_CLK_PERIPH2_CLK2	62
 #define IMX6SL_CLK_IPG			63
 #define IMX6SL_CLK_CSI_PODF		64
 #define IMX6SL_CLK_LCDIF_AXI_PODF	65
@@ -145,6 +145,7 @@
 #define IMX6SL_CLK_USDHC4		132
 #define IMX6SL_CLK_PLL4_AUDIO_DIV	133
 #define IMX6SL_CLK_SPBA			134
-#define IMX6SL_CLK_END			135
+#define IMX6SL_CLK_UART_OSC_4M		135
+#define IMX6SL_CLK_END			136
 
 #endif /* __DT_BINDINGS_CLOCK_IMX6SL_H */

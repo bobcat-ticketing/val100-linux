@@ -108,14 +108,19 @@ static void uart_start(struct tty_struct *tty)
 static inline void
 uart_update_mctrl(struct uart_port *port, unsigned int set, unsigned int clear)
 {
+	
 	unsigned long flags;
 	unsigned int old;
 
+	
 	spin_lock_irqsave(&port->lock, flags);
 	old = port->mctrl;
 	port->mctrl = (old & ~clear) | set;
+	
 	if (old != port->mctrl)
+	{
 		port->ops->set_mctrl(port, port->mctrl);
+	}
 	spin_unlock_irqrestore(&port->lock, flags);
 }
 
@@ -162,8 +167,9 @@ static int uart_port_startup(struct tty_struct *tty, struct uart_state *state,
 		 */
 		uart_change_speed(tty, state, NULL);
 
-		if (init_hw) {
-			/*
+		if (init_hw) 
+		{
+		  /*
 			 * Setup the RTS and DTR signals once the
 			 * port is open and ready to respond.
 			 */
@@ -949,9 +955,11 @@ static int uart_tiocmget(struct tty_struct *tty)
 	struct tty_port *port = &state->port;
 	struct uart_port *uport = state->uart_port;
 	int result = -EIO;
+	
 
 	mutex_lock(&port->mutex);
-	if (!(tty->flags & (1 << TTY_IO_ERROR))) {
+	if (!(tty->flags & (1 << TTY_IO_ERROR))) 
+	{
 		result = uport->mctrl;
 		spin_lock_irq(&uport->lock);
 		result |= uport->ops->get_mctrl(uport);
@@ -971,7 +979,8 @@ uart_tiocmset(struct tty_struct *tty, unsigned int set, unsigned int clear)
 	int ret = -EIO;
 
 	mutex_lock(&port->mutex);
-	if (!(tty->flags & (1 << TTY_IO_ERROR))) {
+	if (!(tty->flags & (1 << TTY_IO_ERROR))) 
+	{
 		uart_update_mctrl(uport, set, clear);
 		ret = 0;
 	}
@@ -1272,7 +1281,9 @@ static void uart_set_termios(struct tty_struct *tty,
 		if (!(cflag & CRTSCTS) ||
 		    !test_bit(TTY_THROTTLED, &tty->flags))
 			mask |= TIOCM_RTS;
-		uart_set_mctrl(uport, mask);
+		{	
+			uart_set_mctrl(uport, mask);
+		}
 	}
 
 	/*
@@ -1508,9 +1519,15 @@ static void uart_dtr_rts(struct tty_port *port, int onoff)
 	struct uart_port *uport = state->uart_port;
 
 	if (onoff)
+	{
 		uart_set_mctrl(uport, TIOCM_DTR | TIOCM_RTS);
+
+	}
 	else
+	{
 		uart_clear_mctrl(uport, TIOCM_DTR | TIOCM_RTS);
+
+	}
 }
 
 /*
@@ -1954,6 +1971,7 @@ int uart_suspend_port(struct uart_driver *drv, struct uart_port *uport)
 
 			spin_lock_irq(&uport->lock);
 			ops->stop_tx(uport);
+			
 			ops->set_mctrl(uport, 0);
 			ops->stop_rx(uport);
 			spin_unlock_irq(&uport->lock);
@@ -2042,6 +2060,7 @@ int uart_resume_port(struct uart_driver *drv, struct uart_port *uport)
 
 		uart_change_pm(state, UART_PM_STATE_ON);
 		spin_lock_irq(&uport->lock);
+		
 		ops->set_mctrl(uport, 0);
 		spin_unlock_irq(&uport->lock);
 		if (console_suspend_enabled || !uart_console(uport)) {
@@ -2052,6 +2071,7 @@ int uart_resume_port(struct uart_driver *drv, struct uart_port *uport)
 				if (tty)
 					uart_change_speed(tty, state, NULL);
 				spin_lock_irq(&uport->lock);
+				
 				ops->set_mctrl(uport, uport->mctrl);
 				ops->start_tx(uport);
 				spin_unlock_irq(&uport->lock);
@@ -2148,6 +2168,7 @@ uart_configure_port(struct uart_driver *drv, struct uart_state *state,
 		 * We probably don't need a spinlock around this, but
 		 */
 		spin_lock_irqsave(&port->lock, flags);
+		
 		port->ops->set_mctrl(port, port->mctrl & TIOCM_DTR);
 		spin_unlock_irqrestore(&port->lock, flags);
 

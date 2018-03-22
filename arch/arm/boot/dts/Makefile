@@ -153,19 +153,49 @@ dtb-$(CONFIG_ARCH_MXC) += \
 	imx53-mba53.dtb \
 	imx53-qsb.dtb \
 	imx53-smd.dtb \
+	imx6dl-bgr700.dtb \
+	imx6dl-bgr750.dtb \
+	imx6dl-val100.dtb \
+	imx6dl-val120.dtb \
+	imx6dl-lkbr.dtb \
 	imx6dl-cubox-i.dtb \
+	imx6dl-dfi-fs700-m60.dtb \
+	imx6dl-gw51xx.dtb \
+	imx6dl-gw52xx.dtb \
+	imx6dl-gw53xx.dtb \
+	imx6dl-gw54xx.dtb \
 	imx6dl-hummingboard.dtb \
+	imx6dl-nitrogen6x.dtb \
+	imx6dl-phytec-pbab01.dtb \
 	imx6dl-sabreauto.dtb \
+	imx6dl-sabrelite.dtb \
 	imx6dl-sabresd.dtb \
+	imx6dl-sabresd-hdcp.dtb \
 	imx6dl-wandboard.dtb \
 	imx6q-arm2.dtb \
+	imx6q-bgr700.dtb \
+	imx6q-bgr750.dtb \
+	imx6q-cm-fx6.dtb \
 	imx6q-cubox-i.dtb \
+	imx6q-hummingboard.dtb \
+	imx6q-dfi-fs700-m60.dtb \
+	imx6q-dmo-edmqmx6.dtb \
+	imx6q-gk802.dtb \
+	imx6q-gw51xx.dtb \
+	imx6q-gw52xx.dtb \
+	imx6q-gw53xx.dtb \
+	imx6q-gw5400-a.dtb \
+	imx6q-gw54xx.dtb \
+	imx6q-nitrogen6x.dtb \
 	imx6q-phytec-pbab01.dtb \
 	imx6q-sabreauto.dtb \
 	imx6q-sabrelite.dtb \
 	imx6q-sabresd.dtb \
+	imx6q-sabresd-hdcp.dtb \
 	imx6q-sbc6x.dtb \
 	imx6q-udoo.dtb \
+	imx6q-val100.dtb \
+	imx6q-val120.dtb \
 	imx6q-wandboard.dtb \
 	imx6sl-evk.dtb \
 	vf610-cosmic.dtb \
@@ -312,7 +342,14 @@ dtb-$(CONFIG_ARCH_U300) += ste-u300.dtb
 dtb-$(CONFIG_ARCH_VEXPRESS) += vexpress-v2p-ca5s.dtb \
 	vexpress-v2p-ca9.dtb \
 	vexpress-v2p-ca15-tc1.dtb \
-	vexpress-v2p-ca15_a7.dtb
+	vexpress-v2p-ca15_a7.dtb \
+	rtsm_ve-cortex_a9x2.dtb \
+	rtsm_ve-cortex_a9x4.dtb \
+	rtsm_ve-cortex_a15x1.dtb \
+	rtsm_ve-cortex_a15x2.dtb \
+	rtsm_ve-cortex_a15x4.dtb \
+	rtsm_ve-v2p-ca15x1-ca7x1.dtb \
+	rtsm_ve-v2p-ca15x4-ca7x4.dtb
 dtb-$(CONFIG_ARCH_VIRT) += xenvm-4.2.dtb
 dtb-$(CONFIG_ARCH_VT8500) += vt8500-bv07.dtb \
 	wm8505-ref.dtb \

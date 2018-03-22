@@ -255,6 +255,16 @@ config TOUCHSCREEN_EETI
 	  To compile this driver as a module, choose M here: the
 	  module will be called eeti_ts.
 
+config TOUCHSCREEN_EGALAX_I2C
+	tristate "EETI eGalax multi-touch I2C panel support"
+	depends on I2C && OF
+	help
+	  Say Y here to enable support for I2C connected EETI
+	  eGalax multi-touch panels.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called egalax_i2c.
+
 config TOUCHSCREEN_EGALAX
 	tristate "EETI eGalax multi-touch panel support"
 	depends on I2C && OF
@@ -264,6 +274,16 @@ config TOUCHSCREEN_EGALAX
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called egalax_ts.
+
+config TOUCHSCREEN_FT5X06
+	tristate "FocalTech FT5x06 multi-touch panel support"
+	depends on I2C && OF
+	help
+	  Say Y here to enable support for I2C connected FT5x06
+	  multi-touch panels.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called ft5x06_ts.
 
 config TOUCHSCREEN_FUJITSU
 	tristate "Fujitsu serial touchscreen"
@@ -316,6 +336,18 @@ config TOUCHSCREEN_GUNZE
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called gunze.
+
+config TOUCHSCREEN_GOODIX
+	tristate "Goodix 9xx touchscreen"
+	depends on I2C
+	help
+	  Say Y here if you have the Goodix 9xx touchscreen connected to
+	  your system.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called goodix.
 
 config TOUCHSCREEN_ELO
 	tristate "Elo serial touchscreens"
@@ -883,6 +915,17 @@ config TOUCHSCREEN_PCAP
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called pcap_ts.
+
+config TOUCHSCREEN_SITRONIX_I2C_TOUCH
+	tristate "Sitronix I2C I/F Multi-Touch Controller"
+	depends on I2C
+	---help---
+	Say Y here if you have a Sitronix multitouch panel.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called sitronix_i2c_touch.
 
 config TOUCHSCREEN_ST1232
 	tristate "Sitronix ST1232 touchscreen controllers"

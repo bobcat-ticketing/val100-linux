@@ -47,6 +47,7 @@
 #include <linux/slab.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
+#include <linux/of_gpio.h>
 #include <linux/io.h>
 #include <linux/dma-mapping.h>
 
@@ -226,6 +227,16 @@ struct imx_port {
 	unsigned int		tx_bytes;
 	unsigned int		dma_tx_nents;
 	wait_queue_head_t	dma_wait;
+	
+	
+	/* Experimental */
+	
+	unsigned int            cts_gpio;
+        unsigned int            rts_gpio;
+	unsigned int		dsr_gpio;
+	unsigned int		dtr_gpio;
+	
+	/* End Experimental */
 };
 
 struct imx_port_ucrs {
@@ -608,6 +619,8 @@ static void imx_start_tx(struct uart_port *port)
 
 static irqreturn_t imx_rtsint(int irq, void *dev_id)
 {
+  
+	//printk("UART%d: RTS INTERUPT\n", dev_id);
 	struct imx_port *sport = dev_id;
 	unsigned int val;
 	unsigned long flags;
@@ -798,16 +811,59 @@ static unsigned int imx_tx_empty(struct uart_port *port)
 static unsigned int imx_get_mctrl(struct uart_port *port)
 {
 	struct imx_port *sport = (struct imx_port *)port;
-	unsigned int tmp = TIOCM_DSR | TIOCM_CAR;
+	unsigned int tmp = TIOCM_CAR;
 
-	if (readl(sport->port.membase + USR1) & USR1_RTSS)
-		tmp |= TIOCM_CTS;
+	if(0)
+	{
+		if (readl(sport->port.membase + USR1) & USR1_RTSS)
+		{
+			//printk("UART%x: Get rts USR value is set\n", port->membase);
+			tmp |= TIOCM_CTS;
+		}
+		
+		if (readl(sport->port.membase + UCR2) & UCR2_CTS)
+		{
+			//printk("UART%x: Get cts UCR value is set\n", port->membase);
+			tmp |= TIOCM_RTS;
+		}
+		
+		tmp |= TIOCM_DSR;
+	}
+	else
+	{
+	  //printk("UART%x: GET mctrl:\n", port->membase);
+		if(!gpio_get_value(sport->rts_gpio)) //if gpio values are low, corresponding signals are set (RS232 levels are inverted)
+		{
+			//printk("UART%x: Get rts GPIO value is set\n", port->membase);
+			tmp |= TIOCM_RTS;
+		}
+		
+		if(!gpio_get_value(sport->dtr_gpio))
+		{
+			//printk("UART%x: Get dtr GPIO value is set\n", port->membase);
+			tmp |= TIOCM_DTR;
+		}
+		
+		if(!gpio_get_value(sport->cts_gpio))
+		{
+			//printk("UART%x: Get cts GPIO value is set\n", port->membase);
+			tmp |= TIOCM_CTS;
+		}
+		
+		if(!gpio_get_value(sport->dsr_gpio))
+		{
+			//printk("UART%x: Get dsr GPIO value is set\n", port->membase);
+			tmp |= TIOCM_DSR;
+		}
+		
+	}
 
-	if (readl(sport->port.membase + UCR2) & UCR2_CTS)
-		tmp |= TIOCM_RTS;
+	
 
 	if (readl(sport->port.membase + uts_reg(sport)) & UTS_LOOP)
 		tmp |= TIOCM_LOOP;
+	
+	//printk("UART%x: GET mctrl returned: %d\n", port->membase, tmp);
 
 	return tmp;
 }
@@ -816,15 +872,57 @@ static void imx_set_mctrl(struct uart_port *port, unsigned int mctrl)
 {
 	struct imx_port *sport = (struct imx_port *)port;
 	unsigned long temp;
+	unsigned int assert_rts = mctrl & TIOCM_RTS;
+	unsigned int assert_dtr = mctrl & TIOCM_DTR;
 
-	temp = readl(sport->port.membase + UCR2) & ~UCR2_CTS;
+	
+	//printk("UART%x: SET mctrl = %d, assert_rts = %d, assert_dtr = %d\n", port->membase, mctrl, assert_rts, assert_dtr);
+	
 
-	if (mctrl & TIOCM_RTS)
-		if (!sport->dma_is_enabled)
-			temp |= UCR2_CTS;
+	if (0) //actual rts/cts
+	{
+		temp = readl(sport->port.membase + UCR2) & ~UCR2_CTS;
+		
+		if(assert_rts)
+		{
+			if (!sport->dma_is_enabled)
+			{
+				temp |= UCR2_CTS;
+				//printk("UART%x: mctrl setting UCR value \n", port->membase);
+			}
+				
+				
 
-	writel(temp, sport->port.membase + UCR2);
+			writel(temp, sport->port.membase + UCR2);
+		}
+	}
+	else //GPIO based rts/cts 
+	{
+		if (assert_rts) //if assert values, then set logic values to low (RS232 levels are inverted)
+		{
+			//printk("UART%x: set RTS\n", port->membase);
+			gpio_set_value(sport->rts_gpio, 0);
+		}
+		else
+		{
+			//printk("UART%x: unset RTS\n", port->membase);
+			gpio_set_value(sport->rts_gpio, 1);
+		}
+		
+		if (assert_dtr)
+		{
+			//printk("UART%x: set DTR\n", port->membase);
+			gpio_set_value(sport->dtr_gpio, 0);
+		}
+		else
+		{
+			//printk("UART%x: unset DTR\n", port->membase);
+			gpio_set_value(sport->dtr_gpio, 1);
+		}
+	}
 
+	
+	
 	temp = readl(sport->port.membase + uts_reg(sport)) & ~UTS_LOOP;
 	if (mctrl & TIOCM_LOOP)
 		temp |= UTS_LOOP;
@@ -1298,6 +1396,9 @@ static void
 imx_set_termios(struct uart_port *port, struct ktermios *termios,
 		   struct ktermios *old)
 {
+  
+  //printk("UART%x: TERMIOS\n", port->membase);
+  
 	struct imx_port *sport = (struct imx_port *)port;
 	unsigned long flags;
 	unsigned int ucr2, old_ucr1, old_txrxen, baud, quot;
@@ -1329,9 +1430,11 @@ imx_set_termios(struct uart_port *port, struct ktermios *termios,
 		ucr2 = UCR2_WS | UCR2_SRST | UCR2_IRTS;
 	else
 		ucr2 = UCR2_SRST | UCR2_IRTS;
-
+	
+	//printk("UART%x: TERMIOS before bit about RTSCTS\n", port->membase);
 	if (termios->c_cflag & CRTSCTS) {
-		if (sport->have_rtscts) {
+		if (sport->have_rtscts) 
+		{	
 			ucr2 &= ~UCR2_IRTS;
 			ucr2 |= UCR2_CTSC;
 
@@ -1339,10 +1442,15 @@ imx_set_termios(struct uart_port *port, struct ktermios *termios,
 			if (is_imx6q_uart(sport) && !uart_console(port)
 				&& !sport->dma_is_inited)
 				imx_uart_dma_init(sport);
-		} else {
+		} 
+		else 
+		{
 			termios->c_cflag &= ~CRTSCTS;
 		}
 	}
+	//printk("UART%x: TERMIOS after bit about RTSCTS\n", port->membase);
+	
+	
 
 	if (termios->c_cflag & CSTOPB)
 		ucr2 |= UCR2_STPB;
@@ -1460,6 +1568,8 @@ imx_set_termios(struct uart_port *port, struct ktermios *termios,
 	if (sport->dma_is_inited && !sport->dma_is_enabled)
 		imx_enable_dma(sport);
 	spin_unlock_irqrestore(&sport->port.lock, flags);
+	
+	//printk("UART%x: TERMIOS -- END\n", port->membase);
 }
 
 static const char *imx_type(struct uart_port *port)
@@ -1901,7 +2011,121 @@ static int serial_imx_probe_dt(struct imx_port *sport,
 
 	if (of_get_property(np, "fsl,dte-mode", NULL))
 		sport->dte_mode = 1;
+	
 
+	
+	/*get rts and cts GPIO from dts file */
+	/* Experimental!!! */
+
+        if (of_get_property(np, "fsl,uart-has-gpio-rtscts", NULL))
+        {
+		sport->have_rtscts = 1;
+        
+                if (of_find_property(pdev->dev.of_node, "cts-gpios", NULL))
+                {
+                        sport->cts_gpio = of_get_named_gpio(pdev->dev.of_node, "cts-gpios", 0);
+                }
+                
+                else
+                {
+                        sport->cts_gpio = -1;
+                }
+                
+                if (of_find_property(pdev->dev.of_node, "rts-gpios", NULL))
+                {
+                        sport->rts_gpio = of_get_named_gpio(pdev->dev.of_node, "rts-gpios", 0);
+                }
+                
+                else
+                {
+                        sport->rts_gpio = -1;
+                }
+
+                if ((!gpio_is_valid(sport->cts_gpio) || !gpio_is_valid(sport->rts_gpio))) 
+                {
+                        ret = -EINVAL;
+                        dev_err(&pdev->dev, "Usp flow control must have cts and rts gpio");
+                        //goto err;
+                }
+                
+                ret = devm_gpio_request(&pdev->dev, sport->cts_gpio,	"usp-cts-gpio");
+                
+                if (ret) 
+                {
+                        dev_err(&pdev->dev, "Unable request cts gpio");
+                        //goto err;
+                }
+                        
+                gpio_direction_input(sport->cts_gpio);
+                
+                ret = devm_gpio_request(&pdev->dev, sport->rts_gpio, "usp-rts-gpio");
+                        
+                if (ret) 
+                {
+                        dev_err(&pdev->dev, "Unable request rts gpio");
+                        //goto err;
+                }
+                
+                gpio_direction_output(sport->rts_gpio, 1);
+        }
+	
+	
+	
+	if (of_get_property(np, "fsl,uart-has-gpio-dsrdtr", NULL))
+        {
+	
+                if (of_find_property(pdev->dev.of_node, "dsr-gpios", NULL))
+                {
+                        sport->dsr_gpio = of_get_named_gpio(pdev->dev.of_node, "dsr-gpios", 0);
+                }
+                
+                else
+                {
+                        sport->dsr_gpio = -1;
+                        printk("UART1: dsr_gpio = -1\n");
+                }
+                
+                if (of_find_property(pdev->dev.of_node, "dtr-gpios", NULL))
+                {
+                        sport->dtr_gpio = of_get_named_gpio(pdev->dev.of_node, "dtr-gpios", 0);
+                }
+                
+                else
+                {
+                        sport->dtr_gpio = -1;
+                        printk("UART1: dtr_gpio = -1\n");
+                }
+
+                if ((!gpio_is_valid(sport->dsr_gpio) || !gpio_is_valid(sport->dtr_gpio))) 
+                {
+                        ret = -EINVAL;
+                        dev_err(&pdev->dev, "Usp flow control must have dsr and dtr gpio");
+                        //goto err;
+                }
+                
+                ret = devm_gpio_request(&pdev->dev, sport->dsr_gpio,	"usp-dsr-gpio");
+                
+                if (ret) 
+                {
+                        dev_err(&pdev->dev, "Unable request dsr gpio");
+                        //goto err;
+                }
+                        
+                gpio_direction_input(sport->dsr_gpio);
+                
+                ret = devm_gpio_request(&pdev->dev, sport->dtr_gpio, "usp-dtr-gpio");
+                        
+                if (ret) 
+                {
+                        dev_err(&pdev->dev, "Unable request dtr gpio");
+                        //goto err;
+                }
+                
+                gpio_direction_output(sport->dtr_gpio, 1);
+        
+        }   
+        /* end Experimental! */
+	
 	sport->devdata = of_id->data;
 
 	return 0;
@@ -1925,7 +2149,7 @@ static void serial_imx_probe_pdata(struct imx_port *sport,
 	if (!pdata)
 		return;
 
-	if (pdata->flags & IMXUART_HAVE_RTSCTS)
+ 	if (pdata->flags & IMXUART_HAVE_RTSCTS)
 		sport->have_rtscts = 1;
 
 	if (pdata->flags & IMXUART_IRDA)

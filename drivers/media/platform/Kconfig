@@ -91,6 +91,13 @@ config VIDEO_M32R_AR_M64278
 	  To compile this driver as a module, choose M here: the
 	  module will be called arv.
 
+config VIDEO_OMAP2
+	tristate "OMAP2 Camera Capture Interface driver"
+	depends on VIDEO_DEV && ARCH_OMAP2 && VIDEO_V4L2_INT_DEVICE
+	select VIDEOBUF_DMA_SG
+	---help---
+	  This is a v4l2 driver for the TI OMAP2 camera capture interface
+
 config VIDEO_OMAP3
 	tristate "OMAP 3 Camera support"
 	depends on OMAP_IOVMM && VIDEO_V4L2 && I2C && VIDEO_V4L2_SUBDEV_API && ARCH_OMAP3
@@ -115,6 +122,21 @@ config VIDEO_S3C_CAMIF
 	  To compile this driver as a module, choose M here: the module
 	  will be called s3c-camif.
 
+config VIDEO_MXC_OUTPUT
+        tristate "MXC Video For Linux Video Output"
+        depends on VIDEO_DEV && ARCH_MXC && FB_MXC
+        select VIDEOBUF_DMA_CONTIG
+        ---help---
+        This is the video4linux2 output driver based on MXC module.
+
+config VIDEO_MXC_CAPTURE
+	tristate "MXC Video For Linux Video Capture"
+	depends on VIDEO_V4L2 && VIDEO_V4L2_INT_DEVICE
+	---help---
+	  This is the video4linux2 capture driver based on i.MX video-in module.
+
+source "drivers/media/platform/mxc/capture/Kconfig"
+source "drivers/media/platform/mxc/output/Kconfig"
 source "drivers/media/platform/soc_camera/Kconfig"
 source "drivers/media/platform/exynos4-is/Kconfig"
 source "drivers/media/platform/s5p-tv/Kconfig"

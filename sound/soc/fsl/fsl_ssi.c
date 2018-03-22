@@ -3,7 +3,7 @@
  *
  * Author: Timur Tabi <timur@freescale.com>
  *
- * Copyright 2007-2010 Freescale Semiconductor, Inc.
+ * Copyright (C) 2007-2013 Freescale Semiconductor, Inc.
  *
  * This file is licensed under the terms of the GNU General Public License
  * version 2.  This program is licensed "as is" without any warranty of any
@@ -30,6 +30,7 @@
  * around this by not polling these bits but only wait a fixed delay.
  */
 
+#include <linux/busfreq-imx6.h>
 #include <linux/init.h>
 #include <linux/io.h>
 #include <linux/module.h>
@@ -43,6 +44,7 @@
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
+#include <linux/pm_runtime.h>
 
 #include <sound/core.h>
 #include <sound/pcm.h>
@@ -71,6 +73,24 @@ static inline void write_ssi_mask(u32 __iomem *addr, u32 clear, u32 set)
 	val = (val & ~clear) | set;
 	writel(val, addr);
 }
+#endif
+
+#ifdef DEBUG
+#define NUM_OF_SSI_REG (sizeof(struct ccsr_ssi) / sizeof(__be32))
+
+void dump_reg(struct ccsr_ssi __iomem *ssi)
+{
+	u32 val, i;
+
+	for (i = 0; i < NUM_OF_SSI_REG; i++) {
+		if (&ssi->stx0 + i == NULL)
+			continue;
+		val = read_ssi(&ssi->stx0 + i);
+		pr_debug("REG %x = %x\n", (u32)(&ssi->stx0 + i) & 0xff, val);
+	}
+}
+#else
+void dump_reg(struct ccsr_ssi __iomem *ssi) {}
 #endif
 
 /**
@@ -171,8 +191,6 @@ struct fsl_ssi_private {
 	struct clk *clk;
 	struct snd_dmaengine_dai_dma_data dma_params_tx;
 	struct snd_dmaengine_dai_dma_data dma_params_rx;
-	struct imx_dma_data filter_data_tx;
-	struct imx_dma_data filter_data_rx;
 	struct imx_pcm_fiq_params fiq_params;
 	/* Register values for rx/tx configuration */
 	struct fsl_ssi_rxtx_reg_val rxtx_reg_val;
@@ -204,6 +222,26 @@ struct fsl_ssi_private {
 	struct dentry *dbg_stats;
 
 	char name[1];
+};
+
+#ifdef CONFIG_PM_RUNTIME
+static int fsl_ssi_runtime_resume(struct device *dev)
+{
+	request_bus_freq(BUS_FREQ_AUDIO);
+	return 0;
+}
+
+static int fsl_ssi_runtime_suspend(struct device *dev)
+{
+	release_bus_freq(BUS_FREQ_AUDIO);
+	return 0;
+}
+#endif
+
+static const struct dev_pm_ops fsl_ssi_pm = {
+	SET_RUNTIME_PM_OPS(fsl_ssi_runtime_suspend,
+			fsl_ssi_runtime_resume,
+			NULL)
 };
 
 static const struct of_device_id fsl_ssi_ids[] = {
@@ -489,6 +527,23 @@ static void fsl_ssi_rxtx_config(struct fsl_ssi_private *ssi_private,
 	}
 }
 
+static void fsl_ssi_clk_ctrl(struct fsl_ssi_private *ssi_private, bool enable)
+{
+	if (enable) {
+		if (ssi_private->ssi_on_imx) {
+			if (!IS_ERR(ssi_private->baudclk))
+				clk_enable(ssi_private->baudclk);
+			clk_enable(ssi_private->clk);
+		}
+	} else {
+		if (ssi_private->ssi_on_imx) {
+			if (!IS_ERR(ssi_private->baudclk))
+				clk_disable(ssi_private->baudclk);
+			clk_disable(ssi_private->clk);
+		}
+	}
+}
+
 /*
  * Enable/Disable a ssi configuration. You have to pass either
  * ssi_private->rxtx_reg_val.rx or tx as vals parameter.
@@ -508,6 +563,8 @@ static void fsl_ssi_config(struct fsl_ssi_private *ssi_private, bool enable,
 		avals = &ssi_private->rxtx_reg_val.tx;
 	else
 		avals = &ssi_private->rxtx_reg_val.rx;
+
+	fsl_ssi_clk_ctrl(ssi_private, enable);
 
 	/* If vals should be disabled, start with disabling the unit */
 	if (!enable) {
@@ -747,6 +804,8 @@ static int fsl_ssi_startup(struct snd_pcm_substream *substream,
 	struct fsl_ssi_private *ssi_private =
 		snd_soc_dai_get_drvdata(rtd->cpu_dai);
 	unsigned long flags;
+
+	pm_runtime_get_sync(dai->dev);
 
 	/* First, we only do fsl_ssi_setup() when SSI is going to be active.
 	 * Second, fsl_ssi_setup was already called by ac97_init earlier if
@@ -1083,14 +1142,17 @@ static int fsl_ssi_trigger(struct snd_pcm_substream *substream, int cmd,
 
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
+	case SNDRV_PCM_TRIGGER_RESUME:
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 			fsl_ssi_tx_config(ssi_private, true);
 		else
 			fsl_ssi_rx_config(ssi_private, true);
+		dump_reg(ssi);
 		break;
 
 	case SNDRV_PCM_TRIGGER_STOP:
+	case SNDRV_PCM_TRIGGER_SUSPEND:
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 			fsl_ssi_tx_config(ssi_private, false);
@@ -1119,6 +1181,12 @@ static int fsl_ssi_trigger(struct snd_pcm_substream *substream, int cmd,
 	return 0;
 }
 
+static void fsl_ssi_shutdown(struct snd_pcm_substream *substream,
+   			     struct snd_soc_dai *dai)
+{
+	pm_runtime_put_sync(dai->dev);
+}
+
 static int fsl_ssi_dai_probe(struct snd_soc_dai *dai)
 {
 	struct fsl_ssi_private *ssi_private = snd_soc_dai_get_drvdata(dai);
@@ -1138,6 +1206,7 @@ static const struct snd_soc_dai_ops fsl_ssi_dai_ops = {
 	.set_sysclk	= fsl_ssi_set_dai_sysclk,
 	.set_tdm_slot	= fsl_ssi_set_dai_tdm_slot,
 	.trigger	= fsl_ssi_trigger,
+	.shutdown	= fsl_ssi_shutdown,
 };
 
 /* Template for the CPU dai driver structure */
@@ -1257,13 +1326,13 @@ static int fsl_ssi_probe(struct platform_device *pdev)
 	int ret = 0;
 	struct device_attribute *dev_attr = NULL;
 	struct device_node *np = pdev->dev.of_node;
+	u32 dmas[4];
 	const struct of_device_id *of_id;
 	enum fsl_ssi_type hw_type;
 	const char *p, *sprop;
 	const uint32_t *iprop;
 	struct resource res;
 	char name[64];
-	bool shared;
 	bool ac97 = false;
 
 	/* SSIs that are not connected on the board should have a
@@ -1381,7 +1450,6 @@ static int fsl_ssi_probe(struct platform_device *pdev)
 
 	if (hw_type == FSL_SSI_MX21 || hw_type == FSL_SSI_MX51 ||
 			hw_type == FSL_SSI_MX35) {
-		u32 dma_events[2], dmas[4];
 		ssi_private->ssi_on_imx = true;
 
 		ssi_private->clk = devm_clk_get(&pdev->dev, NULL);
@@ -1390,9 +1458,9 @@ static int fsl_ssi_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "could not get clock: %d\n", ret);
 			goto error_irqmap;
 		}
-		ret = clk_prepare_enable(ssi_private->clk);
+		ret = clk_prepare(ssi_private->clk);
 		if (ret) {
-			dev_err(&pdev->dev, "clk_prepare_enable failed: %d\n",
+			dev_err(&pdev->dev, "clk_prepare failed: %d\n",
 				ret);
 			goto error_irqmap;
 		}
@@ -1405,41 +1473,21 @@ static int fsl_ssi_probe(struct platform_device *pdev)
 			dev_dbg(&pdev->dev, "could not get baud clock: %ld\n",
 				 PTR_ERR(ssi_private->baudclk));
 		else
-			clk_prepare_enable(ssi_private->baudclk);
+			clk_prepare(ssi_private->baudclk);
 
 		/*
 		 * We have burstsize be "fifo_depth - 2" to match the SSI
 		 * watermark setting in fsl_ssi_startup().
 		 */
-		ssi_private->dma_params_tx.maxburst =
-			ssi_private->fifo_depth - 2;
-		ssi_private->dma_params_rx.maxburst =
-			ssi_private->fifo_depth - 2;
+		ssi_private->dma_params_tx.maxburst = ssi_private->fifo_depth - 2;
+		ssi_private->dma_params_rx.maxburst = ssi_private->fifo_depth - 2;
 		ssi_private->dma_params_tx.addr =
 			ssi_private->ssi_phys + offsetof(struct ccsr_ssi, stx0);
 		ssi_private->dma_params_rx.addr =
 			ssi_private->ssi_phys + offsetof(struct ccsr_ssi, srx0);
-		ssi_private->dma_params_tx.filter_data =
-			&ssi_private->filter_data_tx;
-		ssi_private->dma_params_rx.filter_data =
-			&ssi_private->filter_data_rx;
-		if (!of_property_read_bool(pdev->dev.of_node, "dmas") &&
-				ssi_private->use_dma) {
-			/*
-			 * FIXME: This is a temporary solution until all
-			 * necessary dma drivers support the generic dma
-			 * bindings.
-			 */
-			ret = of_property_read_u32_array(pdev->dev.of_node,
-					"fsl,ssi-dma-events", dma_events, 2);
-			if (ret && ssi_private->use_dma) {
-				dev_err(&pdev->dev, "could not get dma events but fsl-ssi is configured to use DMA\n");
-				goto error_clk;
-			}
-		}
-		/* Should this be merge with the above? */
-		if (!of_property_read_u32_array(pdev->dev.of_node, "dmas", dmas, 4)
-				&& dmas[2] == IMX_DMATYPE_SSI_DUAL) {
+
+		ret = !of_property_read_u32_array(np, "dmas", dmas, 4);
+		if (ssi_private->use_dma && !ret && dmas[2] == IMX_DMATYPE_SSI_DUAL) {
 			ssi_private->use_dual_fifo = true;
 			/* When using dual fifo mode, we need to keep watermark
 			 * as even numbers due to dma script limitation.
@@ -1447,14 +1495,6 @@ static int fsl_ssi_probe(struct platform_device *pdev)
 			ssi_private->dma_params_tx.maxburst &= ~0x1;
 			ssi_private->dma_params_rx.maxburst &= ~0x1;
 		}
-
-		shared = of_device_is_compatible(of_get_parent(np),
-			    "fsl,spba-bus");
-
-		imx_pcm_dma_params_init_data(&ssi_private->filter_data_tx,
-			dma_events[0], shared ? IMX_DMATYPE_SSI_SP : IMX_DMATYPE_SSI);
-		imx_pcm_dma_params_init_data(&ssi_private->filter_data_rx,
-			dma_events[1], shared ? IMX_DMATYPE_SSI_SP : IMX_DMATYPE_SSI);
 	}
 
 	/*
@@ -1473,6 +1513,8 @@ static int fsl_ssi_probe(struct platform_device *pdev)
 			goto error_clk;
 		}
 	}
+
+	pm_runtime_enable(&pdev->dev);
 
 	/* Register with ASoC */
 	dev_set_drvdata(&pdev->dev, ssi_private);
@@ -1509,7 +1551,8 @@ static int fsl_ssi_probe(struct platform_device *pdev)
 			if (ret)
 				goto error_pcm;
 		} else {
-			ret = imx_pcm_dma_init(pdev);
+			ret = imx_pcm_dma_init(pdev, NULL,
+						IMX_SSI_DMABUF_SIZE);
 			if (ret)
 				goto error_pcm;
 		}
@@ -1565,12 +1608,16 @@ error_dbgfs:
 error_dev:
 	device_remove_file(&pdev->dev, dev_attr);
 
-error_clk:
 	if (ssi_private->ssi_on_imx) {
 		if (!IS_ERR(ssi_private->baudclk))
-			clk_disable_unprepare(ssi_private->baudclk);
-		clk_disable_unprepare(ssi_private->clk);
+			clk_unprepare(ssi_private->baudclk);
+		clk_unprepare(ssi_private->clk);
 	}
+error_clk:
+	if (!IS_ERR(ssi_private->baudclk))
+		clk_unprepare(ssi_private->baudclk);
+	if (!IS_ERR(ssi_private->clk))
+		clk_unprepare(ssi_private->clk);
 
 error_irqmap:
 	if (ssi_private->irq_stats)
@@ -1590,8 +1637,8 @@ static int fsl_ssi_remove(struct platform_device *pdev)
 	snd_soc_unregister_component(&pdev->dev);
 	if (ssi_private->ssi_on_imx) {
 		if (!IS_ERR(ssi_private->baudclk))
-			clk_disable_unprepare(ssi_private->baudclk);
-		clk_disable_unprepare(ssi_private->clk);
+			clk_unprepare(ssi_private->baudclk);
+		clk_unprepare(ssi_private->clk);
 	}
 	if (ssi_private->irq_stats)
 		irq_dispose_mapping(ssi_private->irq);
@@ -1604,6 +1651,7 @@ static struct platform_driver fsl_ssi_driver = {
 		.name = "fsl-ssi-dai",
 		.owner = THIS_MODULE,
 		.of_match_table = fsl_ssi_ids,
+		.pm = &fsl_ssi_pm,
 	},
 	.probe = fsl_ssi_probe,
 	.remove = fsl_ssi_remove,

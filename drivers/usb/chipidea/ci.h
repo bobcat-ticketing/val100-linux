@@ -139,8 +139,8 @@ struct hw_bank {
  * @roles: array of supported roles for this controller
  * @role: current role
  * @is_otg: if the device is otg-capable
- * @work: work for role changing
- * @wq: workqueue thread
+ * @otg_task: the thread for handling otg task
+ * @otg_wait: the otg event waitqueue head
  * @qh_pool: allocation pool for queue heads
  * @td_pool: allocation pool for transfer descriptors
  * @gadget: device side representation for peripheral controller
@@ -165,6 +165,10 @@ struct hw_bank {
  * @b_sess_valid_event: indicates there is a vbus event, and handled
  * at ci_otg_work
  * @imx28_write_fix: Freescale imx28 needs swp instruction for writing
+ * @supports_runtime_pm: if runtime pm is supported
+ * @in_lpm: if the core in low power mode
+ * @wakeup_int: if wakeup interrupt occur
+ * @timer: timer to delay clock closing
  */
 struct ci_hdrc {
 	struct device			*dev;
@@ -174,8 +178,8 @@ struct ci_hdrc {
 	struct ci_role_driver		*roles[CI_ROLE_END];
 	enum ci_role			role;
 	bool				is_otg;
-	struct work_struct		work;
-	struct workqueue_struct		*wq;
+	struct task_struct		*otg_task;
+	wait_queue_head_t		otg_wait;
 
 	struct dma_pool			*qh_pool;
 	struct dma_pool			*td_pool;
@@ -204,6 +208,10 @@ struct ci_hdrc {
 	bool				id_event;
 	bool				b_sess_valid_event;
 	bool				imx28_write_fix;
+	bool				supports_runtime_pm;
+	bool				in_lpm;
+	bool				wakeup_int;
+	struct timer_list		timer;
 };
 
 static inline struct ci_role_driver *ci_role(struct ci_hdrc *ci)

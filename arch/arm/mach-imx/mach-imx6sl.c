@@ -17,8 +17,9 @@
 #include <asm/mach/map.h>
 
 #include "common.h"
+#include "cpuidle.h"
 
-static void __init imx6sl_fec_init(void)
+static void __init imx6sl_fec_clk_init(void)
 {
 	struct regmap *gpr;
 
@@ -34,8 +35,17 @@ static void __init imx6sl_fec_init(void)
 	}
 }
 
+static inline void imx6sl_fec_init(void)
+{
+	imx6sl_fec_clk_init();
+	imx6_enet_mac_init("fsl,imx6sl-fec");
+}
+
 static void __init imx6sl_init_late(void)
 {
+	/* Init CPUIDLE */
+	imx6sl_cpuidle_init();
+
 	/* imx6sl reuses imx6q cpufreq driver */
 	if (IS_ENABLED(CONFIG_ARM_IMX6Q_CPUFREQ))
 		platform_device_register_simple("imx6q-cpufreq", -1, NULL, 0);
@@ -55,8 +65,7 @@ static void __init imx6sl_init_machine(void)
 
 	imx6sl_fec_init();
 	imx_anatop_init();
-	/* Reuse imx6q pm code */
-	imx6q_pm_init();
+	imx6sl_pm_init();
 }
 
 static void __init imx6sl_init_irq(void)

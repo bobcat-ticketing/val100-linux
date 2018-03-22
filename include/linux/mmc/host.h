@@ -282,6 +282,7 @@ struct mmc_host {
 				 MMC_CAP2_PACKED_WR)
 #define MMC_CAP2_NO_PRESCAN_POWERUP (1 << 14)	/* Don't power up before scan */
 #define MMC_CAP2_SANITIZE	(1 << 15)		/* Support Sanitize */
+#define MMC_CAP2_SDIO_NOTHREAD	(1 << 16)
 
 	mmc_pm_flag_t		pm_caps;	/* supported pm features */
 
@@ -296,6 +297,11 @@ struct mmc_host {
 	struct device_attribute clkgate_delay_attr;
 	unsigned long           clkgate_delay;
 #endif
+
+	/* card specific properties to deal with power and reset */
+	struct regulator	*card_regulator; /* External VCC needed by the card */
+	struct gpio_desc	*card_reset_gpios[2]; /* External resets, active low */
+	struct clk		*card_clk;	/* External clock needed by the card */
 
 	/* host specific block data */
 	unsigned int		max_seg_size;	/* see blk_queue_max_segment_size */
@@ -396,6 +402,8 @@ static inline void mmc_signal_sdio_irq(struct mmc_host *host)
 	host->sdio_irq_pending = true;
 	wake_up_process(host->sdio_irq_thread);
 }
+
+void sdio_run_irqs(struct mmc_host *host);
 
 #ifdef CONFIG_REGULATOR
 int mmc_regulator_get_ocrmask(struct regulator *supply);

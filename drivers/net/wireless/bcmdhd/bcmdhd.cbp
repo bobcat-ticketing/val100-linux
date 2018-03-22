@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="bcmdhd" />
+		<Option pch_mode="2" />
+		<Option compiler="arm-elf-gcc" />
+		<Build>
+			<Target title="Debug">
+				<Option output="bin/Debug/bcmdhd" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Debug/" />
+				<Option type="1" />
+				<Option compiler="arm-elf-gcc" />
+				<Compiler>
+					<Add option="-g" />
+				</Compiler>
+			</Target>
+			<Target title="Release">
+				<Option output="bin/Release/bcmdhd" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Release/" />
+				<Option type="1" />
+				<Option compiler="arm-elf-gcc" />
+				<Compiler>
+					<Add option="-O2" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+				</Linker>
+			</Target>
+		</Build>
+		<Compiler>
+			<Add option="-Wall" />
+		</Compiler>
+		<Unit filename="aiutils.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="bcmdhd.mod.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="bcmevent.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="bcmsdh.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="bcmsdh_linux.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="bcmsdh_sdmmc.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="bcmsdh_sdmmc_linux.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="bcmutils.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="bcmwifi_channels.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="circularbuf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="common/include/devctrl_if/wlioctl_defs.h" />
+		<Unit filename="dhd.h" />
+		<Unit filename="dhd_bta.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dhd_bta.h" />
+		<Unit filename="dhd_bus.h" />
+		<Unit filename="dhd_cdc.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dhd_cfg80211.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dhd_cfg80211.h" />
+		<Unit filename="dhd_cfg_vendor.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dhd_common.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dhd_custom_gpio.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dhd_dbg.h" />
+		<Unit filename="dhd_ip.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dhd_ip.h" />
+		<Unit filename="dhd_linux.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dhd_linux.h" />
+		<Unit filename="dhd_linux_platdev.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dhd_linux_sched.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dhd_linux_wq.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dhd_linux_wq.h" />
+		<Unit filename="dhd_log.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dhd_msgbuf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dhd_pcie.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dhd_pcie.h" />
+		<Unit filename="dhd_pcie_linux.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dhd_pno.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dhd_pno.h" />
+		<Unit filename="dhd_proto.h" />
+		<Unit filename="dhd_sdio.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dhd_wlfc.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dhd_wlfc.h" />
+		<Unit filename="dngl_stats.h" />
+		<Unit filename="dngl_wlhdr.h" />
+		<Unit filename="hnd_pktpool.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="hnd_pktq.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="hndpmu.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="include/aidmp.h" />
+		<Unit filename="include/bcm_cfg.h" />
+		<Unit filename="include/bcm_mpool_pub.h" />
+		<Unit filename="include/bcmcdc.h" />
+		<Unit filename="include/bcmdefs.h" />
+		<Unit filename="include/bcmdevs.h" />
+		<Unit filename="include/bcmendian.h" />
+		<Unit filename="include/bcmmsgbuf.h" />
+		<Unit filename="include/bcmpcie.h" />
+		<Unit filename="include/bcmpcispi.h" />
+		<Unit filename="include/bcmperf.h" />
+		<Unit filename="include/bcmsdbus.h" />
+		<Unit filename="include/bcmsdh.h" />
+		<Unit filename="include/bcmsdh_sdmmc.h" />
+		<Unit filename="include/bcmsdpcm.h" />
+		<Unit filename="include/bcmsdspi.h" />
+		<Unit filename="include/bcmsdstd.h" />
+		<Unit filename="include/bcmspi.h" />
+		<Unit filename="include/bcmutils.h" />
+		<Unit filename="include/bcmwifi_channels.h" />
+		<Unit filename="include/bcmwifi_rates.h" />
+		<Unit filename="include/brcm_nl80211.h" />
+		<Unit filename="include/circularbuf.h" />
+		<Unit filename="include/dhdioctl.h" />
+		<Unit filename="include/epivers.h" />
+		<Unit filename="include/hnd_armtrap.h" />
+		<Unit filename="include/hnd_cons.h" />
+		<Unit filename="include/hnd_pktpool.h" />
+		<Unit filename="include/hnd_pktq.h" />
+		<Unit filename="include/hndpmu.h" />
+		<Unit filename="include/hndsoc.h" />
+		<Unit filename="include/linux_osl.h" />
+		<Unit filename="include/linuxver.h" />
+		<Unit filename="include/miniopt.h" />
+		<Unit filename="include/msgtrace.h" />
+		<Unit filename="include/osl.h" />
+		<Unit filename="include/osl_decl.h" />
+		<Unit filename="include/packed_section_end.h" />
+		<Unit filename="include/packed_section_start.h" />
+		<Unit filename="include/pcicfg.h" />
+		<Unit filename="include/pcie_core.h" />
+		<Unit filename="include/proto/802.11.h" />
+		<Unit filename="include/proto/802.11_bta.h" />
+		<Unit filename="include/proto/802.11e.h" />
+		<Unit filename="include/proto/802.1d.h" />
+		<Unit filename="include/proto/802.3.h" />
+		<Unit filename="include/proto/bcmdhcp.h" />
+		<Unit filename="include/proto/bcmeth.h" />
+		<Unit filename="include/proto/bcmevent.h" />
+		<Unit filename="include/proto/bcmip.h" />
+		<Unit filename="include/proto/bcmipv6.h" />
+		<Unit filename="include/proto/bcmtcp.h" />
+		<Unit filename="include/proto/bcmudp.h" />
+		<Unit filename="include/proto/bt_amp_hci.h" />
+		<Unit filename="include/proto/eapol.h" />
+		<Unit filename="include/proto/ethernet.h" />
+		<Unit filename="include/proto/p2p.h" />
+		<Unit filename="include/proto/sdspi.h" />
+		<Unit filename="include/proto/vlan.h" />
+		<Unit filename="include/proto/wpa.h" />
+		<Unit filename="include/sbchipc.h" />
+		<Unit filename="include/sbconfig.h" />
+		<Unit filename="include/sbhnddma.h" />
+		<Unit filename="include/sbpcmcia.h" />
+		<Unit filename="include/sbsdio.h" />
+		<Unit filename="include/sbsdpcmdev.h" />
+		<Unit filename="include/sbsocram.h" />
+		<Unit filename="include/sdio.h" />
+		<Unit filename="include/sdioh.h" />
+		<Unit filename="include/sdiovar.h" />
+		<Unit filename="include/siutils.h" />
+		<Unit filename="include/trxhdr.h" />
+		<Unit filename="include/typedefs.h" />
+		<Unit filename="include/wlfc_proto.h" />
+		<Unit filename="include/wlioctl.h" />
+		<Unit filename="linux_osl.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="pcie_core.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="sbutils.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="siutils.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="siutils_priv.h" />
+		<Unit filename="uamp_api.h" />
+		<Unit filename="wl_android.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="wl_android.h" />
+		<Unit filename="wl_cfg80211.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="wl_cfg80211.h" />
+		<Unit filename="wl_cfg_btcoex.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="wl_cfgp2p.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="wl_cfgp2p.h" />
+		<Unit filename="wl_cfgvendor.h" />
+		<Unit filename="wl_dbg.h" />
+		<Unit filename="wl_iw.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="wl_iw.h" />
+		<Unit filename="wl_linux_mon.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="wldev_common.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="wldev_common.h" />
+		<Extensions>
+			<code_completion />
+			<debugger />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>

@@ -1,5 +1,6 @@
 config ARCH_MXC
 	bool "Freescale i.MX family" if ARCH_MULTI_V4_V5 || ARCH_MULTI_V6_V7
+	select ARCH_HAS_RESET_CONTROLLER
 	select ARCH_REQUIRE_GPIOLIB
 	select ARM_CPU_SUSPEND if PM
 	select ARM_PATCH_PHYS_VIRT
@@ -13,6 +14,7 @@ config ARCH_MXC
 	select PINCTRL
 	select SOC_BUS
 	select SPARSE_IRQ
+	select SRAM
 	select USE_OF
 	help
 	  Support for Freescale MXC/iMX-based family of processors
@@ -63,7 +65,6 @@ config HAVE_IMX_MMDC
 
 config HAVE_IMX_SRC
 	def_bool y if SMP
-	select ARCH_HAS_RESET_CONTROLLER
 
 config IMX_HAVE_IOMUX_V1
 	bool
@@ -791,6 +792,8 @@ config SOC_IMX6Q
 	select ARM_ERRATA_754322
 	select ARM_ERRATA_764369 if SMP
 	select ARM_ERRATA_775420
+	select ARM_ERRATA_794072 if SMP
+	select ARM_ERRATA_761320 if SMP
 	select ARM_GIC
 	select CPU_V7
 	select HAVE_ARM_SCU if SMP
@@ -803,11 +806,13 @@ config SOC_IMX6Q
 	select MFD_SYSCON
 	select MIGHT_HAVE_PCI
 	select PCI_DOMAINS if PCI
+	select ARCH_SUPPORTS_MSI
 	select PINCTRL_IMX6Q
 	select PL310_ERRATA_588369 if CACHE_PL310
 	select PL310_ERRATA_727915 if CACHE_PL310
 	select PL310_ERRATA_769419 if CACHE_PL310
 	select PM_OPP if PM
+	select ZONE_DMA
 
 	help
 	  This enables support for Freescale i.MX6 Quad processor.

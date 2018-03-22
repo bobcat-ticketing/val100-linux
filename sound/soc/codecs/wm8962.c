@@ -16,6 +16,7 @@
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/pm.h>
+#include <linux/clk.h>
 #include <linux/gcd.h>
 #include <linux/gpio.h>
 #include <linux/i2c.h>
@@ -2942,7 +2943,8 @@ static int wm8962_mute(struct snd_soc_dai *dai, int mute)
 				   WM8962_DAC_MUTE, val);
 }
 
-#define WM8962_RATES SNDRV_PCM_RATE_8000_96000
+#define WM8962_RATES (SNDRV_PCM_RATE_8000_48000 |\
+			SNDRV_PCM_RATE_88200 | SNDRV_PCM_RATE_96000)
 
 #define WM8962_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |\
 			SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S32_LE)
@@ -3536,6 +3538,15 @@ static int wm8962_set_pdata_from_of(struct i2c_client *i2c,
 				pdata->gpio_init[i] = 0x0;
 		}
 
+	pdata->codec_mclk = devm_clk_get(&i2c->dev, NULL);
+
+	/*
+	 * If clk_get() failed, we assume that clock's enabled by default.
+	 * Otherwise, we let driver prepare and control the clock source.
+	 */
+	if (IS_ERR(pdata->codec_mclk))
+		pdata->codec_mclk = NULL;
+
 	return 0;
 }
 
@@ -3566,6 +3577,9 @@ static int wm8962_i2c_probe(struct i2c_client *i2c,
 		if (ret != 0)
 			return ret;
 	}
+
+	if (wm8962->pdata.codec_mclk)
+		clk_prepare(wm8962->pdata.codec_mclk);
 
 	for (i = 0; i < ARRAY_SIZE(wm8962->supplies); i++)
 		wm8962->supplies[i].supply = wm8962_supply_names[i];
@@ -3669,6 +3683,27 @@ static int wm8962_i2c_probe(struct i2c_client *i2c,
 				   WM8962_MICBIAS_LVL,
 				   wm8962->pdata.mic_cfg);
 
+	/* set the default volume for playback and record*/
+	snd_soc_update_bits(codec, WM8962_HPOUTL_VOLUME,
+			    WM8962_HPOUTL_VOL_MASK, 0x5d);
+	snd_soc_update_bits(codec, WM8962_HPOUTR_VOLUME,
+			    WM8962_HPOUTR_VOL_MASK, 0x5d);
+	snd_soc_update_bits(codec, WM8962_SPKOUTL_VOLUME,
+			    WM8962_SPKOUTL_VOL_MASK, 0x72);
+	snd_soc_update_bits(codec, WM8962_SPKOUTR_VOLUME,
+			    WM8962_SPKOUTR_VOL_MASK, 0x72);
+
+	snd_soc_update_bits(codec, WM8962_LEFT_INPUT_VOLUME,
+			    WM8962_INL_VOL_MASK, 0x3f);
+	snd_soc_update_bits(codec, WM8962_RIGHT_INPUT_VOLUME,
+			    WM8962_INR_VOL_MASK, 0x3f);
+	snd_soc_update_bits(codec, WM8962_LEFT_ADC_VOLUME,
+			    WM8962_ADCL_VOL_MASK, 0xd8);
+	snd_soc_update_bits(codec, WM8962_RIGHT_ADC_VOLUME,
+			    WM8962_ADCR_VOL_MASK, 0xd8);
+	snd_soc_update_bits(codec, WM8962_RIGHT_INPUT_MIXER_VOLUME,
+			    WM8962_IN3R_MIXINR_VOL_MASK, 0x7);
+
 	/* Latch volume update bits */
 	regmap_update_bits(wm8962->regmap, WM8962_LEFT_INPUT_VOLUME,
 			   WM8962_IN_VU, WM8962_IN_VU);
@@ -3752,6 +3787,9 @@ static int wm8962_i2c_probe(struct i2c_client *i2c,
 
 	regcache_cache_only(wm8962->regmap, true);
 
+	/* The cache-only should be turned on before we power down the codec */
+	regcache_cache_only(wm8962->regmap, true);
+
 	/* The drivers should power up as needed */
 	regulator_bulk_disable(ARRAY_SIZE(wm8962->supplies), wm8962->supplies);
 
@@ -3760,11 +3798,19 @@ static int wm8962_i2c_probe(struct i2c_client *i2c,
 err_enable:
 	regulator_bulk_disable(ARRAY_SIZE(wm8962->supplies), wm8962->supplies);
 err:
+	if (wm8962->pdata.codec_mclk)
+		clk_unprepare(wm8962->pdata.codec_mclk);
+
 	return ret;
 }
 
 static int wm8962_i2c_remove(struct i2c_client *client)
 {
+	struct wm8962_priv *wm8962 = dev_get_drvdata(&client->dev);
+
+	if (wm8962->pdata.codec_mclk)
+		clk_unprepare(wm8962->pdata.codec_mclk);
+
 	snd_soc_unregister_codec(&client->dev);
 	return 0;
 }
@@ -3774,6 +3820,9 @@ static int wm8962_runtime_resume(struct device *dev)
 {
 	struct wm8962_priv *wm8962 = dev_get_drvdata(dev);
 	int ret;
+
+	if (wm8962->pdata.codec_mclk)
+		clk_enable(wm8962->pdata.codec_mclk);
 
 	ret = regulator_bulk_enable(ARRAY_SIZE(wm8962->supplies),
 				    wm8962->supplies);
@@ -3833,6 +3882,10 @@ static int wm8962_runtime_suspend(struct device *dev)
 
 	regulator_bulk_disable(ARRAY_SIZE(wm8962->supplies),
 			       wm8962->supplies);
+
+	if (wm8962->pdata.codec_mclk)
+		clk_disable(wm8962->pdata.codec_mclk);
+
 
 	return 0;
 }

@@ -9,6 +9,9 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
+ *
+ * 13/05/2016 - Modified by Jon Considine
+ * Added keyboard descriptor and init/cleanup calls to instantiate.
  */
 
 
@@ -24,8 +27,8 @@
 
 /*-------------------------------------------------------------------------*/
 
-#define HIDG_VENDOR_NUM		0x0525	/* XXX NetChip */
-#define HIDG_PRODUCT_NUM	0xa4ac	/* Linux-USB HID gadget */
+#define HIDG_VENDOR_NUM		0x0DB5	/* Access IS */
+#define HIDG_PRODUCT_NUM	0x015E	/* Linux-USB HID gadget */
 
 /*-------------------------------------------------------------------------*/
 
@@ -107,8 +110,51 @@ static struct usb_gadget_strings *dev_strings[] = {
 	NULL,
 };
 
+/* hid descriptor for Access IS device */
+static struct hidg_func_descriptor kbd_hid_data = {
+	.subclass		= 0, /* No subclass */
+	.protocol		= 1, /* Keyboard */
+	.report_length		= 64,
+	.report_desc_length	= 53,
+	.report_desc		= {
+          0x06, 0xFF, 0xFF,         // 04|2   , Usage Page (vendordefined?)
+          0x09, 0x01,               // 08|1   , Usage      (vendordefined
+          0xA1, 0x01,               // A0|1   , Collection (Application)
+          // IN report
+          0x09, 0x02,               // 08|1   , Usage      (vendordefined)
+          0x09, 0x03,               // 08|1   , Usage      (vendordefined)
+          0x15, 0x00,               // 14|1   , Logical Minimum(0 for signed byte?)
+          0x26 ,0xFF,0x00,          // 24|1   , Logical Maximum(255 for signed byte?)
+          0x75, 0x08,               // 74|1   , Report Size(8) = field size in bits = 1 byte
+          0x95, 0x40,               // 94|1:ReportCount(size) = repeat count of previous item
+          0x81, 0x02,               // 80|1: IN report (Data,Variable, Absolute)
+          // OUT report
+          0x09, 0x04,               // 08|1   , Usage      (vendordefined)
+          0x09, 0x05,               // 08|1   , Usage      (vendordefined)
+          0x15, 0x00,               // 14|1   , Logical Minimum(0 for signed byte?)
+          0x26, 0xFF,0x00,          // 24|1   , Logical Maximum(255 for signed byte?)
+          0x75, 0x08,               // 74|1   , Report Size(8) = field size in bits = 1 byte
+          0x95, 0x40,               // 94|1:ReportCount(size) = repeat count of previous item
+          0x91, 0x02,               // 90|1: OUT report (Data,Variable, Absolute)
+          // Feature report
+          0x09, 0x06,               // 08|1   , Usage      (vendordefined)
+          0x09, 0x07,               // 08|1   , Usage      (vendordefined)
+          0x15, 0x00,               // 14|1   , LogicalMinimum(0 for signed byte)
+          0x26, 0xFF,0x00,          // 24|1   , Logical Maximum(255 for signed byte)
+          0x75, 0x08,               // 74|1   , Report Size(8) =field size in bits = 1 byte
+          0x95, 0x04,               // 94|1:ReportCount
+          0xB1, 0x02,               // B0|1:   Feature report
+          0xC0                      // C0|0    , End Collection
+	}
+};
 
-
+static struct platform_device kbd_hid = {
+	.name			= "hidg",
+	.id			= 0,
+	.num_resources		= 0,
+	.resource		= 0,
+	.dev.platform_data	= &kbd_hid_data,
+};
 /****************************** Configurations ******************************/
 
 static int __init do_config(struct usb_configuration *c)
@@ -188,6 +234,8 @@ static int __init hidg_plat_driver_probe(struct platform_device *pdev)
 	struct hidg_func_descriptor *func = dev_get_platdata(&pdev->dev);
 	struct hidg_func_node *entry;
 
+	dev_dbg(&pdev->dev, "hidg_plat_driver_probe() called\n");
+
 	if (!func) {
 		dev_err(&pdev->dev, "Platform data missing\n");
 		return -ENODEV;
@@ -245,7 +293,12 @@ static int __init hidg_init(void)
 {
 	int status;
 
-	status = platform_driver_probe(&hidg_plat_driver,
+    status = platform_device_register(&kbd_hid);
+
+	if (status < 0)
+		return status;
+
+    status = platform_driver_probe(&hidg_plat_driver,
 				hidg_plat_driver_probe);
 	if (status < 0)
 		return status;
@@ -254,13 +307,14 @@ static int __init hidg_init(void)
 	if (status < 0)
 		platform_driver_unregister(&hidg_plat_driver);
 
-	return status;
+    return status;
 }
 module_init(hidg_init);
 
 static void __exit hidg_cleanup(void)
 {
 	platform_driver_unregister(&hidg_plat_driver);
+	platform_device_unregister(&kbd_hid);
 	usb_composite_unregister(&hidg_driver);
 }
 module_exit(hidg_cleanup);

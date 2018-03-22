@@ -165,25 +165,30 @@ u8 hw_port_test_get(struct ci_hdrc *ci)
 	return hw_read(ci, OP_PORTSC, PORTSC_PTC) >> __ffs(PORTSC_PTC);
 }
 
+static void hw_wait_phy_stable(void)
+{
+	/* The controller needs at least 1ms to reflect PHY's status */
+	usleep_range(2000, 2500);
+}
+
+static void delay_runtime_pm_put_timer(unsigned long arg)
+{
+	struct ci_hdrc *ci = (struct ci_hdrc *)arg;
+
+	pm_runtime_put(ci->dev);
+}
+
 /* The PHY enters/leaves low power mode */
 static void ci_hdrc_enter_lpm(struct ci_hdrc *ci, bool enable)
 {
 	enum ci_hw_regs reg = ci->hw_bank.lpm ? OP_DEVLC : OP_PORTSC;
 	bool lpm = !!(hw_read(ci, reg, PORTSC_PHCD(ci->hw_bank.lpm)));
 
-	if (enable && !lpm) {
+	if (enable && !lpm)
 		hw_write(ci, reg, PORTSC_PHCD(ci->hw_bank.lpm),
 				PORTSC_PHCD(ci->hw_bank.lpm));
-	} else  if (!enable && lpm) {
-		hw_write(ci, reg, PORTSC_PHCD(ci->hw_bank.lpm),
-				0);
-		/* 
-		 * The controller needs at least 1ms to reflect
-		 * PHY's status, the PHY also needs some time (less
-		 * than 1ms) to leave low power mode.
-		 */
-		usleep_range(1500, 2000);
-	}
+	else if (!enable && lpm)
+		hw_write(ci, reg, PORTSC_PHCD(ci->hw_bank.lpm), 0);
 }
 
 static int hw_device_init(struct ci_hdrc *ci, void __iomem *base)
@@ -351,6 +356,13 @@ static irqreturn_t ci_irq(int irq, void *data)
 	irqreturn_t ret = IRQ_NONE;
 	u32 otgsc = 0;
 
+	if (ci->in_lpm) {
+		disable_irq_nosync(irq);
+		ci->wakeup_int = true;
+		pm_runtime_get(ci->dev);
+		return IRQ_HANDLED;
+	}
+
 	if (ci->is_otg)
 		otgsc = hw_read(ci, OP_OTGSC, ~0);
 
@@ -362,7 +374,7 @@ static irqreturn_t ci_irq(int irq, void *data)
 		ci->id_event = true;
 		ci_clear_otg_interrupt(ci, OTGSC_IDIS);
 		disable_irq_nosync(ci->irq);
-		queue_work(ci->wq, &ci->work);
+		wake_up(&ci->otg_wait);
 		return IRQ_HANDLED;
 	}
 
@@ -374,7 +386,7 @@ static irqreturn_t ci_irq(int irq, void *data)
 		ci->b_sess_valid_event = true;
 		ci_clear_otg_interrupt(ci, OTGSC_BSVIS);
 		disable_irq_nosync(ci->irq);
-		queue_work(ci->wq, &ci->work);
+		wake_up(&ci->otg_wait);
 		return IRQ_HANDLED;
 	}
 
@@ -473,6 +485,33 @@ void ci_hdrc_remove_device(struct platform_device *pdev)
 }
 EXPORT_SYMBOL_GPL(ci_hdrc_remove_device);
 
+/**
+ * ci_hdrc_query_available_role: get runtime available operation mode
+ *
+ * The glue layer can get current operation mode (host/peripheral/otg)
+ * This function should be called after ci core device has created.
+ *
+ * @pdev: the platform device of ci core.
+ *
+ * Return USB_DR_MODE_XXX.
+ */
+enum usb_dr_mode ci_hdrc_query_available_role(struct platform_device *pdev)
+{
+	struct ci_hdrc *ci = platform_get_drvdata(pdev);
+
+	if (!ci)
+		return USB_DR_MODE_UNKNOWN;
+	if (ci->roles[CI_ROLE_HOST] && ci->roles[CI_ROLE_GADGET])
+		return USB_DR_MODE_OTG;
+	else if (ci->roles[CI_ROLE_HOST])
+		return USB_DR_MODE_HOST;
+	else if (ci->roles[CI_ROLE_GADGET])
+		return USB_DR_MODE_PERIPHERAL;
+	else
+		return USB_DR_MODE_UNKNOWN;
+}
+EXPORT_SYMBOL_GPL(ci_hdrc_query_available_role);
+
 static inline void ci_role_destroy(struct ci_hdrc *ci)
 {
 	ci_hdrc_gadget_destroy(ci);
@@ -498,9 +537,14 @@ static void ci_get_otg_capable(struct ci_hdrc *ci)
 
 static int ci_usb_phy_init(struct ci_hdrc *ci)
 {
+	int ret;
+
 	if (ci->platdata->phy) {
 		ci->transceiver = ci->platdata->phy;
-		return usb_phy_init(ci->transceiver);
+		ret = usb_phy_init(ci->transceiver);
+		if (!ret)
+			hw_wait_phy_stable();
+		return ret;
 	} else {
 		ci->global_phy = true;
 		ci->transceiver = usb_get_phy(USB_PHY_TYPE_USB2);
@@ -559,8 +603,6 @@ static int ci_hdrc_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	hw_phymode_configure(ci);
-
 	ret = ci_usb_phy_init(ci);
 	if (ret) {
 		dev_err(dev, "unable to init phy: %d\n", ret);
@@ -578,7 +620,13 @@ static int ci_hdrc_probe(struct platform_device *pdev)
 
 	ci_get_otg_capable(ci);
 
+	hw_phymode_configure(ci);
+
 	dr_mode = ci->platdata->dr_mode;
+
+	ci->supports_runtime_pm = !!(ci->platdata->flags &
+		CI_HDRC_SUPPORTS_RUNTIME_PM);
+
 	/* initialize role(s) before the interrupt is requested */
 	if (dr_mode == USB_DR_MODE_OTG || dr_mode == USB_DR_MODE_HOST) {
 		ret = ci_hdrc_host_init(ci);
@@ -619,11 +667,6 @@ static int ci_hdrc_probe(struct platform_device *pdev)
 
 	if (ci->roles[CI_ROLE_HOST] && ci->roles[CI_ROLE_GADGET]) {
 		if (ci->is_otg) {
-			/*
-			 * ID pin needs 1ms debouce time,
-			 * we delay 2ms for safe.
-			 */
-			mdelay(2);
 			ci->role = ci_otg_role(ci);
 			ci_enable_otg_interrupt(ci, OTGSC_IDIE);
 		} else {
@@ -656,6 +699,15 @@ static int ci_hdrc_probe(struct platform_device *pdev)
 	if (ret)
 		goto stop;
 
+	device_set_wakeup_capable(&pdev->dev, true);
+
+	if (ci->supports_runtime_pm) {
+		pm_runtime_set_active(&pdev->dev);
+		pm_runtime_enable(&pdev->dev);
+	}
+
+	setup_timer(&ci->timer, delay_runtime_pm_put_timer,
+			(unsigned long)ci);
 	ret = dbg_create_files(ci);
 	if (!ret)
 		return 0;
@@ -673,6 +725,11 @@ static int ci_hdrc_remove(struct platform_device *pdev)
 {
 	struct ci_hdrc *ci = platform_get_drvdata(pdev);
 
+	if (ci->supports_runtime_pm) {
+		pm_runtime_get_sync(&pdev->dev);
+		pm_runtime_disable(&pdev->dev);
+		pm_runtime_put_noidle(&pdev->dev);
+	}
 	dbg_remove_files(ci);
 	free_irq(ci->irq, ci);
 	ci_role_destroy(ci);
@@ -682,11 +739,120 @@ static int ci_hdrc_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_PM
+static int ci_controller_suspend(struct device *dev)
+{
+	struct ci_hdrc *ci = dev_get_drvdata(dev);
+
+	dev_dbg(dev, "at %s\n", __func__);
+
+	if (ci->in_lpm)
+		return 0;
+
+	disable_irq(ci->irq);
+
+	if (ci->transceiver)
+		usb_phy_set_wakeup(ci->transceiver, true);
+
+	ci_hdrc_enter_lpm(ci, true);
+
+	if (ci->transceiver)
+		usb_phy_set_suspend(ci->transceiver, 1);
+
+	ci->in_lpm = true;
+
+	enable_irq(ci->irq);
+
+	return 0;
+}
+
+static int ci_controller_resume(struct device *dev)
+{
+	struct ci_hdrc *ci = dev_get_drvdata(dev);
+
+	dev_dbg(dev, "at %s\n", __func__);
+
+	if (!ci->in_lpm)
+		return 0;
+
+	ci_hdrc_enter_lpm(ci, false);
+
+	if (ci->transceiver) {
+		usb_phy_set_suspend(ci->transceiver, 0);
+		usb_phy_set_wakeup(ci->transceiver, false);
+		hw_wait_phy_stable();
+	}
+
+	ci->in_lpm = false;
+
+	if (ci->wakeup_int) {
+		ci->wakeup_int = false;
+		enable_irq(ci->irq);
+		mod_timer(&ci->timer, jiffies + msecs_to_jiffies(2000));
+	}
+
+	return 0;
+}
+
+#ifdef CONFIG_PM_SLEEP
+static int ci_suspend(struct device *dev)
+{
+	struct ci_hdrc *ci = dev_get_drvdata(dev);
+	int ret;
+
+	ret = ci_controller_suspend(dev);
+	if (ret)
+		return ret;
+
+	if (device_may_wakeup(dev))
+		enable_irq_wake(ci->irq);
+
+	return ret;
+}
+
+static int ci_resume(struct device *dev)
+{
+	struct ci_hdrc *ci = dev_get_drvdata(dev);
+	int ret;
+
+	if (device_may_wakeup(dev))
+		disable_irq_wake(ci->irq);
+
+	ret = ci_controller_resume(dev);
+	if (!ret && ci->supports_runtime_pm) {
+		pm_runtime_disable(dev);
+		pm_runtime_set_active(dev);
+		pm_runtime_enable(dev);
+	}
+
+	return ret;
+}
+#endif /* CONFIG_PM_SLEEP */
+
+#ifdef CONFIG_PM_RUNTIME
+static int ci_runtime_suspend(struct device *dev)
+{
+	return ci_controller_suspend(dev);
+}
+
+static int ci_runtime_resume(struct device *dev)
+{
+	return ci_controller_resume(dev);
+}
+#endif /* CONFIG_PM_RUNTIME */
+
+#endif /* CONFIG_PM */
+static const struct dev_pm_ops ci_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(ci_suspend, ci_resume)
+	SET_RUNTIME_PM_OPS(ci_runtime_suspend, ci_runtime_resume, NULL)
+};
+
 static struct platform_driver ci_hdrc_driver = {
 	.probe	= ci_hdrc_probe,
 	.remove	= ci_hdrc_remove,
 	.driver	= {
 		.name	= "ci_hdrc",
+		.pm	= &ci_pm_ops,
 	},
 };
 

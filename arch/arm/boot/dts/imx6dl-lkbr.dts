@@ -1,0 +1,13 @@
+/*
+ * Copyright (C) 2015 Access-IS
+ * Based on work by Solid Run & Russell King
+ */
+/dts-v1/;
+
+#include "imx6dl.dtsi"
+#include "imx6qdl-lkbr.dtsi"
+
+/ {
+	model = "Access-IS LKBR";
+	compatible = "Access-IS,lkbr/dl", "fsl,imx6dl";
+};
